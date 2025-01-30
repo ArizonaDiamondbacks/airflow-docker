@@ -4,47 +4,41 @@ from datetime import datetime
 import os
 import json
 from pathlib import Path
+import time
 
 # Define paths
 JSON_PATH = "/opt/airflow/json_files"
-OUTPUT_PATH = "/opt/airflow/logs/json_metadata"
+OUTPUT_FILE = "/opt/airflow/logs/file_paths.json"
 
-def get_json_files_metadata(**context):
-    """Get metadata of JSON files without reading their full content"""
-    # Ensure output directory exists
-    os.makedirs(OUTPUT_PATH, exist_ok=True)
+def list_json_paths(**context):
+    """Ultra-efficient file listing with progress tracking"""
+    start_time = time.time()
+    all_paths = []
+    file_count = 0
     
-    metadata_list = []
+    # Use low-level os.walk for maximum performance
+    for root, _, files in os.walk(JSON_PATH):
+        for filename in files:
+            if filename.lower().endswith('.json'):
+                full_path = os.path.join(root, filename)
+                all_paths.append(full_path)
+                file_count += 1
+                
+                # Progress reporting every 1000 files
+                if file_count % 1000 == 0:
+                    print(f"Found {file_count} files...")
     
-    # Use Path for better path handling
-    json_path = Path(JSON_PATH)
+    # Write all paths in one operation
+    with open(OUTPUT_FILE, 'w') as f:
+        json.dump(all_paths, f, indent=2)
     
-    # Walk through directory
-    for file_path in json_path.rglob("*.json"):
-        # Get file stats
-        stats = file_path.stat()
-        
-        metadata = {
-            "filename": file_path.name,
-            "relative_path": str(file_path.relative_to(json_path)),
-            "size_bytes": stats.st_size,
-            "modified_time": datetime.fromtimestamp(stats.st_mtime).isoformat(),
-            "created_time": datetime.fromtimestamp(stats.st_ctime).isoformat()
-        }
-        metadata_list.append(metadata)
-    
-    # Write metadata to output file
-    output_file = Path(OUTPUT_PATH) / "json_files_metadata.json"
-    with output_file.open('w') as f:
-        json.dump(metadata_list, f, indent=2)
-    
-    return len(metadata_list)
+    print(f"Found {file_count} files in {time.time() - start_time:.2f} seconds")
+    return file_count
 
 default_args = {
     'owner': 'airflow',
     'start_date': datetime(2024, 1, 1),
-    'depends_on_past': False,
-    'retries': 1
+    'retries': 0  # Disable retries for testing
 }
 
 with DAG('json_files_metadata',
@@ -54,5 +48,5 @@ with DAG('json_files_metadata',
 
     list_json_files = PythonOperator(
         task_id='get_json_files_metadata',
-        python_callable=get_json_files_metadata
+        python_callable=list_json_paths
     )
