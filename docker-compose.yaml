@@ -38,7 +38,6 @@
 ---
 x-airflow-common:
   &airflow-common
-  build: .
   env_file: .env
   environment:
     &airflow-common-env
@@ -57,13 +56,24 @@ x-airflow-common:
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./output:/opt/airflow/output
-    - /mnt/cobra/HawkeyeParsedFiles:/opt/airflow/json_files:ro
+    # - ./bins:/opt/airflow/bins
+    # - /mnt/cobra/HawkeyeParsedFiles:/opt/airflow/json_files:ro
+    - /home/hanbo/repositories/hawkeye_etl/json_to_parquet/data:/opt/airflow/json_files:ro
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
   depends_on:
     postgres:
       condition: service_healthy
 
 services:
+  build-image-once:
+    image: hawkeye-airflow:latest
+    build:
+      context: ..
+      dockerfile: ./airflow-docker/Dockerfile
+    # Make it a "dummy" service
+    container_name: build-image-once
+    entrypoint: ["true"]   # So it doesn't actually run anything
+
   postgres:
     image: postgres:13
     environment:
@@ -81,6 +91,7 @@ services:
     restart: always
 
   airflow-webserver:
+    image: hawkeye-airflow:latest
     <<: *airflow-common
     command: webserver    
     ports:
@@ -93,11 +104,13 @@ services:
     restart: always
 
   airflow-scheduler:
+    image: hawkeye-airflow:latest
     <<: *airflow-common
     command: scheduler
     restart: always
 
   airflow-init:
+    image: hawkeye-airflow:latest
     <<: *airflow-common
     command: version
     environment:
