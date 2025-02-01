@@ -39,3 +39,16 @@ docker ps
 1. Open browser and type http://0.0.0.0:8080 to launch the airflow webserver
 
 ![](images/screenshot_airflow_docker.png)
+
+## About Airflow worker parallelism testing
+
+when set up the parallelism as below on a laptop with 16 GB RAM, Ultra 7 165H CPU.
+```docker-compose
+...
+environment:
+    AIRFLOW__CORE__PARALLELISM: 16
+    AIRFLOW__CORE__DAG_CONCURRENCY: 16
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 1
+...
+```
+The [DAG](dags/hawkeye.py) tested against 123 local json file with dynamic task mapping would take 38 secs to complete.
