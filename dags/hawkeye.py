@@ -1,7 +1,7 @@
 import os
 from io import BytesIO
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowSkipException
@@ -58,10 +58,10 @@ def hawkeye():
             avro_reader = reader(avro_file)
 
             # 3. Extract the processed files from the manifest
-            processed_files = [record['file_path'] for record in avro_reader]
+            processed_files = [record['file_name'] for record in avro_reader]
 
             # 4. Filter out the processed files
-            unprocessed_files = [file for file in file_list if file not in processed_files]
+            unprocessed_files = [file for file in file_list if os.path.basename(file) not in processed_files]
             return unprocessed_files
         
         except s3_client.exceptions.NoSuchKey:
@@ -107,9 +107,9 @@ def hawkeye():
 
             # Return the details if successful
             return {
-                "file_path": os.path.basename(file_path),
+                "file_name": os.path.basename(file_path),
                 "status": "success",
-                "timestamp": datetime.now(datetime.timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
                 
             }
         except subprocess.CalledProcessError as e:
@@ -137,7 +137,7 @@ def hawkeye():
             "name": "ManifestRecord",
             "type": "record",
             "fields": [
-                {"name": "file_path",  "type": "string"},
+                {"name": "file_name",  "type": "string"},
                 {"name": "status",     "type": "string"},
                 {"name": "timestamp",  "type": "string"},
             ]
