@@ -1,7 +1,7 @@
 # -----------------------------------------------------------
 # 1) BUILDER STAGE: Build the Rust workspace from hawkeye_etl
 # -----------------------------------------------------------
-    FROM rust:slim-bullseye AS builder
+    FROM rust:1.83-slim-bullseye AS builder
 
     # We'll work in /app for building
     WORKDIR /app
