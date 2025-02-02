@@ -47,8 +47,8 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
-    AIRFLOW__CORE__PARALLELISM: 16
-    AIRFLOW__CORE__DAG_CONCURRENCY: 16
+    AIRFLOW__CORE__PARALLELISM: 40
+    AIRFLOW__CORE__DAG_CONCURRENCY: 40
     AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 1
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'True'
   volumes:
@@ -57,8 +57,8 @@ x-airflow-common:
     - ./plugins:/opt/airflow/plugins
     - ./output:/opt/airflow/output
     # - ./bins:/opt/airflow/bins
-    # - /mnt/cobra/HawkeyeParsedFiles:/opt/airflow/json_files:ro
-    - /home/hanbo/repositories/hawkeye_etl/json_to_parquet/data:/opt/airflow/json_files:ro
+    - /mnt/cobra/HawkeyeParsedFiles:/opt/airflow/json_files:ro
+    # - /home/hanbo/repositories/hawkeye_etl/json_to_parquet/data:/opt/airflow/json_files:ro
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
   depends_on:
     postgres:
