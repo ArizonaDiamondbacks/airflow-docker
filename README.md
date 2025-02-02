@@ -1,18 +1,3 @@
-# Apache Airflow Tutorial Series [YouTube](https://www.youtube.com/watch?v=z7xyNOF8tak&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT)
-## Updated Tutorial Episode
-1. [Introduction and Local Installation](https://www.youtube.com/watch?v=z7xyNOF8tak&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=1)
-2. [Get Airflow running in Docker](https://www.youtube.com/watch?v=J6azvFhndLg&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=2)
-3. [Airflow Core Concepts in 5 mins](https://www.youtube.com/watch?v=mtJHMdoi_Gg&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=3)
-4. [Airflow Task Lifecycle and Basic Architecture](https://www.youtube.com/watch?v=UFsCvWjQT4w&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=4)
-5. [Airflow DAG with BashOperator](https://www.youtube.com/watch?v=CLkzXrjrFKg&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=5)
-6. [Airflow DAG with PythonOperator and XComs](https://www.youtube.com/watch?v=IumQX-mm20Y&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=6)
-7. [Airflow TaskFlow API](https://www.youtube.com/watch?v=9y0mqWsok_4&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=7)
-8. [Airflow Catchup and Backfill](https://www.youtube.com/watch?v=OXOiUeHOQ-0&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=8)
-9. [Schedule Airflow DAG with Cron Expression](https://www.youtube.com/watch?v=tpuovQFUByk&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=9)
-10. [Airflow Connection and PostgresOperator](https://www.youtube.com/watch?v=S1eapG6gjLU&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=10)
-11. [Add Python Dependencies via Airflow Docker Image Extending and Customizing](https://www.youtube.com/watch?v=0UepvC9X4HY&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=11)
-12. [AWS S3 Key Sensor Operator](https://www.youtube.com/watch?v=vuxrhipJMCk&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=12)
-13. [Airflow Hooks S3 PostgreSQL](https://www.youtube.com/watch?v=rcG4WNwi900&list=PLwFJcsJ61oujAqYpMp1kdUBcPG0sE0QMT&index=13)
 
 ## Running apache airflow 2.0 in docker with local executor.
 Here are the steps to take to get airflow 2.0 running with docker on your machine. 
@@ -38,17 +23,29 @@ docker ps
 ```
 1. Open browser and type http://0.0.0.0:8080 to launch the airflow webserver
 
-![](images/screenshot_airflow_docker.png)
 
 ## About Airflow worker parallelism testing
 
-when set up the parallelism as below on a laptop with 16 GB RAM, Ultra 7 165H CPU.
-```docker-compose
-...
-environment:
-    AIRFLOW__CORE__PARALLELISM: 16
-    AIRFLOW__CORE__DAG_CONCURRENCY: 16
-    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 1
-...
-```
-The [DAG](dags/hawkeye.py) tested against 123 local json file with dynamic task mapping would take 38 secs to complete.
+1. 
+    when set up the parallelism as below on a laptop with 16 GB RAM, Ultra 7 165H CPU.
+    ```docker-compose
+    ...
+    environment:
+        AIRFLOW__CORE__PARALLELISM: 16
+        AIRFLOW__CORE__DAG_CONCURRENCY: 16
+        AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: 1
+    ...
+    ```
+    The [DAG](dags/hawkeye.py) tested against 123 local json file with dynamic task mapping would take 38 secs to complete.
+
+    when set up the parallelism as this:
+    ```docker-compose
+        AIRFLOW__CORE__PARALLELISM: 50
+        AIRFLOW__CORE__DAG_CONCURRENCY: 50
+    ```
+    The same DAG tested against 123 local json file with dynamic task mapping taks the same 38 secs to complete.
+
+
+2. 
+    Then we increased the json file to 1150. The total time comes to 3 mins 18 secs, with around 5 G RAM usage.
+    For parallelism 50, the total time comes to 1 mins 41 secs, with around 10 G RAM usage. If we set the batch number from 500 to 100, then the time can further reduce to 1 mins 14 secs.
