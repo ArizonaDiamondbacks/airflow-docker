@@ -89,7 +89,7 @@ def hawkeye_batched():
         """Dynamic batch preparation"""
         if not file_list:
             return []
-        return list(chunk_files(file_list, num_batches=100))
+        return list(chunk_files(file_list, num_batches=240))
 
     @task
     def process_batch(file_paths: list):
