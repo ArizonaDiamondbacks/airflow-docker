@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 import subprocess
 from datetime import datetime, timezone
+import math
 
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowSkipException
@@ -15,13 +16,23 @@ BUCKET_NAME = "azd-hawkeyeplayertracking-databricks-east".strip()
 MANIFEST_FILE_KEY = "test/manifest.avro".strip()
 S3_PATH_URL = "s3://azd-hawkeyeplayertracking-databricks-east/test".strip()
 
+def chunk_files(file_list: list, num_batches: int):
+    """Dynamic batch sizing based on total files"""
+    if not file_list:
+        return []
+    
+    chunk_size = math.ceil(len(file_list) / num_batches)
+    for i in range(0, len(file_list), chunk_size):
+        yield file_list[i:i + chunk_size]
+
+
 @dag(
-    dag_id='hawkeye',
+    dag_id='hawkeye_batched',
     schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
 )
-def hawkeye():
+def hawkeye_batched():
 
     @task
     def list_files(**context):
@@ -72,58 +83,58 @@ def hawkeye():
             print(f"Error reading manifest file: {str(e)}")
             raise
     
+    # Add this task inside your DAG definition
     @task
-    def process_and_upload_file(file_path: str):
-        """
-        Runs the Rust 'process' app to create 6 Parquet files,
-        then runs the 'upload' app or uses AWS CLI/SDK to upload them,
-        plus a log file, to S3. Returns a dict with details if success.
-        Raises an exception if fails, causing the task to be marked failed.
-        """
-        try:
-            # 1) Process step
-            result = subprocess.run(
-                ["/opt/airflow/bins/json_to_parquet", file_path, "/opt/airflow/output"],
-                check=True,
-                capture_output=True,   # capture stdout and stderr
-                text=True              # decode bytes -> string
-            )
-            print("----- JSON to Parquet Output -----")
-            print(result.stdout)
-            print("----- JSON to Parquet Errors -----")
-            print(result.stderr)
+    def prepare_batches(file_list: list) -> list[list[str]]:
+        """Dynamic batch preparation"""
+        if not file_list:
+            return []
+        return list(chunk_files(file_list, num_batches=100))
 
-            # 2) Upload step
-            result2 = subprocess.run(
-                ["/opt/airflow/bins/upload_to_s3", file_path, "/opt/airflow/output", S3_PATH_URL],
-                check=True,
-                capture_output=True,
-                text=True
-            )
-            print("----- Uploader STDOUT -----")
-            print(result2.stdout)
-            print("----- Uploader STDERR -----")
-            print(result2.stderr)
+    @task
+    def process_batch(file_paths: list):
+        """
+        Processes a batch of files sequentially, preserving per-file logging.
+        Returns a list of results for successful files.
+        """
+        results = []
+        for file_path in file_paths:
+            try:
+                # 1) Process step
+                result = subprocess.run(
+                    ["/opt/airflow/bins/json_to_parquet", file_path, "/opt/airflow/output"],
+                    check=True,
+                    capture_output=True,   # capture stdout and stderr
+                    text=True              # decode bytes -> string
+                )
+                print("----- JSON to Parquet Output -----")
+                print(result.stdout)
+                print("----- JSON to Parquet Errors -----")
+                print(result.stderr)
 
-            # Return the details if successful
-            return {
-                "file_name": os.path.basename(file_path),
-                "status": "success",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-                
-            }
-        except subprocess.CalledProcessError as e:
-            # Log any captured output we have
-            print(f"Command '{e.cmd}' failed with exit code {e.returncode}")
-            if e.stdout:
-                print("=== STDOUT ===")
-                print(e.stdout)
-            if e.stderr:
-                print("=== STDERR ===")
-                print(e.stderr)
-            # This task will be marked as FAILED, no XCom returned
-            raise RuntimeError(f"Error processing/uploading {file_path}") from e
-        
+                # Upload with Rust app (unchanged logic)
+                result2 = subprocess.run(
+                    ["/opt/airflow/bins/upload_to_s3", file_path, "/opt/airflow/output", S3_PATH_URL],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                print("----- Uploader STDOUT -----")
+                print(result2.stdout)
+                print("----- Uploader STDERR -----")
+                print(result2.stderr)
+
+                # Append success result
+                results.append({
+                    "file_name": os.path.basename(file_path),
+                    "status": "success",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
+            except subprocess.CalledProcessError as e:
+                print(f"Failed {file_path}: {e.stderr}")
+                # Optionally: Collect failed files for retries
+        return results
+    
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def update_manifest(processed_file_list: list):
         """
@@ -145,15 +156,14 @@ def hawkeye():
 
         parsed_schema = fastavro.parse_schema(manifest_schema)
 
-        if not processed_file_list:
-            # processed_file_list is None or empty
-            new_entries = []
-        else:
-            # processed_file_list is a non-empty list (though some may be None if tasks failed)
-            new_entries = [r for r in processed_file_list if r is not None]
+        # Flatten nested lists from batches
+        new_entries = []
+        for batch in processed_file_list:
+            if batch:  # Skip empty batches
+                new_entries.extend([r for r in batch if r])
 
         if not new_entries:
-            print("No new entries to update, either none were unprocessed or all failed.")
+            print("No new entries to update")
             return
         
         # 1) Read the existing manifest from S3
@@ -189,11 +199,16 @@ def hawkeye():
     all_files = list_files()
     unprocessed = filter_unprocessed(all_files)
 
+    # Split into batches of 100 files each
+    # Convert generator to list of batches
+    batches = prepare_batches(unprocessed)
+
     # Map the process-and-upload step over each unprocessed file
-    processed_records = process_and_upload_file.expand(file_path=unprocessed)
+    # Process batches in parallel (now only 700 tasks for 70k files)
+    processed_batches = process_batch.expand(file_paths=batches)
 
     # Aggregator updates the manifest once all tasks are done
-    update_manifest(processed_records)
+    update_manifest(processed_batches)
 
-hawkeye_dag = hawkeye()
+hawkeye_batched_dag = hawkeye_batched()
         
