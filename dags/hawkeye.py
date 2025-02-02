@@ -13,8 +13,8 @@ from fastavro import reader, writer
 
 JSON_PATH = "/opt/airflow/json_files".strip()
 BUCKET_NAME = "azd-hawkeyeplayertracking-databricks-east".strip()
-MANIFEST_FILE_KEY = "test/manifest.avro".strip()
-S3_PATH_URL = "s3://azd-hawkeyeplayertracking-databricks-east/test".strip()
+MANIFEST_FILE_KEY = "landing/processed_year=2024/processed_month=05/manifest.avro".strip()
+S3_PATH_URL = "s3://azd-hawkeyeplayertracking-databricks-east/landing/processed_year=2024/processed_month=05".strip()
 
 def chunk_files(file_list: list, num_batches: int):
     """Dynamic batch sizing based on total files"""
