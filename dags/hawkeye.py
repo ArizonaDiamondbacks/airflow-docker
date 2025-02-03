@@ -94,45 +94,47 @@ def hawkeye_batched():
     @task
     def process_batch(file_paths: list):
         """
-        Processes a batch of files sequentially, preserving per-file logging.
-        Returns a list of results for successful files.
+        Processes a batch of files, failing the entire task if ANY file fails.
+        Returns list of success records only if ALL files succeed.
         """
         results = []
+        failed_files = []
+        
         for file_path in file_paths:
             try:
-                # 1) Process step
-                result = subprocess.run(
+                # Process file with Rust app
+                subprocess.run(
                     ["/opt/airflow/bins/json_to_parquet", file_path, "/opt/airflow/output"],
                     check=True,
-                    capture_output=True,   # capture stdout and stderr
-                    text=True              # decode bytes -> string
+                    capture_output=True,
+                    text=True
                 )
-                print("----- JSON to Parquet Output -----")
-                print(result.stdout)
-                print("----- JSON to Parquet Errors -----")
-                print(result.stderr)
-
-                # Upload with Rust app (unchanged logic)
-                result2 = subprocess.run(
+                
+                # Upload to S3
+                subprocess.run(
                     ["/opt/airflow/bins/upload_to_s3", file_path, "/opt/airflow/output", S3_PATH_URL],
                     check=True,
                     capture_output=True,
                     text=True
                 )
-                print("----- Uploader STDOUT -----")
-                print(result2.stdout)
-                print("----- Uploader STDERR -----")
-                print(result2.stderr)
-
-                # Append success result
+                
                 results.append({
                     "file_name": os.path.basename(file_path),
                     "status": "success",
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 })
+                
             except subprocess.CalledProcessError as e:
-                print(f"Failed {file_path}: {e.stderr}")
-                # Optionally: Collect failed files for retries
+                print(f"Critical failure in {file_path}: {e.stderr}")
+                failed_files.append(file_path)
+        
+        if failed_files:
+            # Fail the entire task if ANY file errors
+            raise RuntimeError(
+                f"Batch failed due to errors in files: {failed_files}\n"
+                f"Successful files: {[r['file_name'] for r in results]}"
+            )
+        
         return results
     
     @task(trigger_rule=TriggerRule.ALL_DONE)
@@ -158,6 +160,10 @@ def hawkeye_batched():
 
         # Flatten nested lists from batches
         new_entries = []
+        if not processed_file_list:
+            print("No files to process")
+            return
+            
         for batch in processed_file_list:
             if batch:  # Skip empty batches
                 new_entries.extend([r for r in batch if r])
