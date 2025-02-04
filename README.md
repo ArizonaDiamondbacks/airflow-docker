@@ -49,3 +49,6 @@ docker ps
 2. 
     Then we increased the json file to 1150. The total time comes to 3 mins 18 secs, with around 5 G RAM usage.
     For parallelism 50, the total time comes to 1 mins 41 secs, with around 10 G RAM usage. If we set the batch number from 500 to 100, then the time can further reduce to 1 mins 14 secs.
+
+3. 
+    With total file of 72531, the initial test took 3:06:42. After adjusting batch number and parallelism to make the batch number can be divided by parallelism evenly, and use opt-lvl 3 for the rust app building, the total time comes to 1:13:57.
