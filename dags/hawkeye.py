@@ -94,8 +94,9 @@ def hawkeye_batched():
     @task
     def process_batch(file_paths: list):
         """
-        Processes a batch of files, failing the entire task if ANY file fails.
-        Returns list of success records only if ALL files succeed.
+        Processes a batch of files.
+        Instead of failing the entire task if ANY file errors,
+        returns an object with the results and failures.
         """
         results = []
         failed_files = []
@@ -128,22 +129,28 @@ def hawkeye_batched():
                 print(f"Critical failure in {file_path}: {e.stderr}")
                 failed_files.append(file_path)
         
-        if failed_files:
-            # Fail the entire task if ANY file errors
-            raise RuntimeError(
-                f"Batch failed due to errors in files: {failed_files}\n"
-                f"Successful files: {[r['file_name'] for r in results]}"
-            )
+        # Determine the batch status; partial_failure if some files failed
+        if failed_files and results:
+            batch_status = "partial_failure"
+        elif failed_files:
+            batch_status = "failure"
+        else:
+            batch_status = "success"
         
-        return results
+        return {
+            "batch_status": batch_status,
+            "success": results,
+            "failures": failed_files
+    }
     
     @task(trigger_rule=TriggerRule.ALL_DONE)
     def update_manifest(processed_file_list: list):
         """
         Aggregator: runs once after *all* parallel tasks are done (success or fail).
-        - Gathers the XCom from each successful subtask in processed_records_list
+        - Gathers the XCom from each processed batch
         - Reads the old manifest from S3
-        - Appends the new records
+        - Appends the new records (only successes) to the manifest
+        - Logs any batches with partial failures so they can be easily identified
         - Writes the updated manifest to S3
         """
         manifest_schema = {
@@ -160,13 +167,24 @@ def hawkeye_batched():
 
         # Flatten nested lists from batches
         new_entries = []
+        partial_batches = []
         if not processed_file_list:
             print("No files to process")
             return
             
-        for batch in processed_file_list:
+        for idx, batch in enumerate(processed_file_list):
             if batch:  # Skip empty batches
-                new_entries.extend([r for r in batch if r])
+                print(f"Batch {idx} status: {batch.get('batch_status')}")
+                # Log batches with any failures
+                if batch.get("batch_status") in ("partial_failure", "failure"):
+                    partial_batches.append((idx, batch.get("failures")))
+                # Add only successful records to manifest
+                new_entries.extend(batch.get("success", []))
+                
+        if partial_batches:
+            print("Warning: The following batches had errors:")
+            for idx, failures in partial_batches:
+                print(f"  Batch {idx} failures: {failures}")
 
         if not new_entries:
             print("No new entries to update")
