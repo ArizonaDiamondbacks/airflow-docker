@@ -69,7 +69,7 @@ def hawkeye_batched():
             avro_reader = reader(avro_file)
 
             # 3. Extract the processed files from the manifest
-            processed_files = [record['file_name'] for record in avro_reader]
+            processed_files = {record['file_name'] for record in avro_reader}
 
             # 4. Filter out the processed files
             unprocessed_files = [file for file in file_list if os.path.basename(file) not in processed_files]
