@@ -33,6 +33,9 @@ RUN mv mold-temp/bin/mold /usr/local/bin/ \
     && chmod +x /usr/local/bin/mold \
     && rm -rf mold-temp mold-2.36.0-x86_64-linux.tar.gz
 
+# Add /usr/local/bin to PATH so that mold is available during build
+ENV PATH="/usr/local/bin:$PATH"
+
 # Set working directory for building
 WORKDIR /app
 
