@@ -58,6 +58,7 @@ x-airflow-common:
     - ./output:/opt/airflow/output
     # - ./bins:/opt/airflow/bins
     - /mnt/cobra/HawkeyeParsedFiles:/opt/airflow/json_files:ro
+    - /home/hanbo/test_data:/opt/airflow/test_json_files:ro
     # - /home/hanbo/repositories/hawkeye_etl/json_to_parquet/data:/opt/airflow/json_files:ro
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
   depends_on:
